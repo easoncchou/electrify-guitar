@@ -279,12 +279,16 @@ float IFX_Overdrive_Update(IFX_Overdrive *od, float inp) {
 
   float clipOut = 0.0f;
 
+  // test: magnitude scaling for DE1-SoC, which has +-20 million readings 
+  float magnitudeScale = 1.2f * 10000000.0f; // 1.2 * 10 million
+  od->threshold *= magnitudeScale;
+
   if (absClipIn < od->threshold) {
     clipOut = 2.0f * clipIn;
   } else if (absClipIn >= od->threshold && absClipIn < (2.0f * od->threshold)) {
     clipOut = signClipIn * (3.0f - (2.0f - 3.0f * absClipIn) * (2.0f - 3.0f * absClipIn)) / 3.0f;
   } else {
-    clipOut = signClipIn;
+    clipOut = signClipIn * magnitudeScale;
   }
 
   od->out = clipOut;
