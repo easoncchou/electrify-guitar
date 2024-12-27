@@ -5,8 +5,8 @@
 #define SAMPLE_RATE_HZ 8000.0f
 // delay line / comb filter constants
 #define DELAYLINE_MAXLENGTH 100000
-#define COMB_ALPHA 0.7f
-#define COMB_BETA 0.3f
+#define COMB_ALPHA 0.6f
+#define COMB_BETA 0.4f
 #define COMB_DELAY_MS 500.0f
 // IIR filter constants
 #define IIR_const_1 0.5
@@ -15,6 +15,7 @@
 // pi lol
 #define M_PI 3.14159265358979323846
 
+volatile int *LEDR_ptr = (int *)0xFF200000;
 
 // tremolo effect {
 typedef struct {
@@ -219,7 +220,7 @@ typedef struct {
   float out; // final output
 } IFX_Overdrive;
 
-void IFX_Overdrive_Init(IFX_Overdrive *od, float samplingFrequencyHz, float hpfCutoffFrequencyHz, float odPreGain, float lpfCutoffFrequencyHz, float lpfDamping) {
+void IFX_Overdrive_Init(IFX_Overdrive *od, float samplingFrequencyHz, float hpfCutoffFrequencyHz, float odPreGain, float lpfCutoffFrequencyHz) {
   
   // sampling time
   od->T = 1.0f / samplingFrequencyHz;
@@ -285,10 +286,13 @@ float IFX_Overdrive_Update(IFX_Overdrive *od, float inp) {
 
   if (absClipIn < od->threshold) {
     clipOut = 2.0f * clipIn;
+    *(LEDR_ptr) = 0x001;
   } else if (absClipIn >= od->threshold && absClipIn < (2.0f * od->threshold)) {
     clipOut = signClipIn * (3.0f - (2.0f - 3.0f * absClipIn) * (2.0f - 3.0f * absClipIn)) / 3.0f;
+    *(LEDR_ptr) = 0x010;
   } else {
     clipOut = signClipIn * magnitudeScale;
+    *(LEDR_ptr) = 0x100;
   }
 
   od->out = clipOut;
@@ -304,12 +308,19 @@ int main() {
 
   Tremolo trem;
   Tremolo_Init(&trem, 0.5f, 5.0f, SAMPLE_RATE_HZ);
+  // taking overdrive calculation into account
+  // Tremolo_Init(&trem, 0.5f, (5.0f / 5.0f), SAMPLE_RATE_HZ);
 
   DelayLine dlyLn;
   DelayLine_Init(&dlyLn, COMB_DELAY_MS, SAMPLE_RATE_HZ);
+  // taking overdrive calculation into account
+  // DelayLine_Init(&dlyLn, (COMB_DELAY_MS / 5.0f), SAMPLE_RATE_HZ);
 
-  int samples_read = 0; // use to experimentally find the sample rate of the default DE1-SoC
-  int guess_rate = 8000;
+  IFX_Overdrive od;
+                      //  sample rate hz, hpf cutoff, od preGain, lpf cutoff
+  IFX_Overdrive_Init(&od, SAMPLE_RATE_HZ, 7000.0f,   50.0f,      2500.0f);
+
+  *(LEDR_ptr) = 0x000;
 
   while (1) {
     fifospace = *(audio_ptr + 1);  // read the audio port fifospace register
@@ -319,21 +330,16 @@ int main() {
     {
       int sample = *(audio_ptr + 3);  // read right channel only
 
+      // overdrive effect
+      sample = IFX_Overdrive_Update(&od, sample);
+
       // comb filter using delay line
-      // sample = COMB_ALPHA * sample + COMB_BETA * DelayLine_Update(&dlyLn, sample);
+      //sample = COMB_ALPHA * sample + COMB_BETA * DelayLine_Update(&dlyLn, sample);
     
       // tremolo effect amplitude modulation
-      // sample = Tremolo_Update(&trem, sample);
+      //sample = Tremolo_Update(&trem, sample);
 
-      // increment the count of samples read
-      samples_read++;
-
-      // print a statement every guess_rate samples read
-      if (samples_read >= guess_rate) {
-        printf("%d samples read\n", guess_rate);
-      }
-
-      sample = sample / 3; // decrease amplitude to lower volume
+      sample =  3 * (sample / 1); // decrease amplitude to lower volume
       *(audio_ptr + 2) = sample;  // Write to both channels
       *(audio_ptr + 3) = sample;
     }
