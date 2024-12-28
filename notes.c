@@ -7,4 +7,6 @@ notes based on experiments today (OCT 29 2024)
 - it seems using the overdrive effect causes the subsequent use 
   of the tremolo and/or the delay take longer e.g. half a second 
   delay becomes like 2 or smth
+- the version without switches to activate the effects sound nicer 
+  because of access times messing with the sample writeback
 */

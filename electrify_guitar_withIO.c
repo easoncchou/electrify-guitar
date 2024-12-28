@@ -5,8 +5,8 @@
 #define SAMPLE_RATE_HZ 8000.0f
 // delay line / comb filter constants
 #define DELAYLINE_MAXLENGTH 100000
-#define COMB_ALPHA 0.7f
-#define COMB_BETA 0.3f
+#define COMB_ALPHA 0.6f
+#define COMB_BETA 0.4f
 #define COMB_DELAY_MS 500.0f
 // IIR filter constants
 #define IIR_const_1 0.5
@@ -289,7 +289,7 @@ float IFX_Overdrive_Update(IFX_Overdrive *od, float inp) {
     // *(LEDR_ptr) = 0x001;
   } else if (absClipIn >= od->threshold && absClipIn < (2.0f * od->threshold)) {
     clipOut = signClipIn * (3.0f - (2.0f - 3.0f * absClipIn) * (2.0f - 3.0f * absClipIn)) / 3.0f;
-    //*(LEDR_ptr) = 0x010;
+    // *(LEDR_ptr) = 0x010;
   } else {
     clipOut = signClipIn * magnitudeScale;
     // *(LEDR_ptr) = 0x100;
@@ -304,6 +304,7 @@ float IFX_Overdrive_Update(IFX_Overdrive *od, float inp) {
 int main() {
   unsigned int fifospace;
   volatile int *audio_ptr = (int *)0xFF203040;  // audio port
+  volatile int *switch_ptr = (int *)0xFF200040; // switch port
   printf("hi\n");
 
   Tremolo trem;
@@ -322,28 +323,49 @@ int main() {
 
   *(LEDR_ptr) = 0x000;
 
+  int useOverdrive = 0;
+  int useDelay = 0;
+  int useTremolo = 0;
+
+  int switch_state = *switch_ptr;
+  int switch_check_counter = 0;
+
   while (1) {
-    fifospace = *(audio_ptr + 1);  // read the audio port fifospace register
-    if ((fifospace & 0x000000FF) > 0 &&  // Available read sample right
-        (fifospace & 0x00FF0000) > 0 &&  // Available write space right
-        (fifospace & 0xFF000000) > 0)    // Available write space left
-    {
-      int sample = *(audio_ptr + 3);  // read right channel only
+      // Check switches less frequently
+      if (++switch_check_counter >= 10000) {
+          switch_state = *switch_ptr;
+          switch_check_counter = 0;
+      }
 
-      // overdrive effect
-      // sample = IFX_Overdrive_Update(&od, sample);
+      useOverdrive = ((switch_state & 0x001) == 0x001);
+      useDelay = ((switch_state & 0x002) == 0x002);
+      useTremolo = ((switch_state & 0x004) == 0x004);
 
-      // comb filter using delay line
-      sample = COMB_ALPHA * sample + COMB_BETA * DelayLine_Update(&dlyLn, sample);
-    
-      // tremolo effect amplitude modulation
-      sample = Tremolo_Update(&trem, sample);
-      
-      // if you are using overdrive, multiply by 3. (divide by 1)
-      // if you are using the other two, divide by 5. (multiply by 1)
-      sample =  1 * (sample / 4); // decrease amplitude to lower volume
-      *(audio_ptr + 2) = sample;  // Write to both channels
-      *(audio_ptr + 3) = sample;
-    }
+      // Process audio sample
+      fifospace = *(audio_ptr + 1);
+      if ((fifospace & 0x000000FF) > 0 &&
+          (fifospace & 0x00FF0000) > 0 &&
+          (fifospace & 0xFF000000) > 0) {
+          
+          int sample = *(audio_ptr + 3);
+
+          if (useOverdrive) {
+              sample = IFX_Overdrive_Update(&od, sample);
+          }
+          if (useDelay) {
+              sample = COMB_ALPHA * sample + COMB_BETA * DelayLine_Update(&dlyLn, sample);
+          }
+          if (useTremolo) {
+              sample = Tremolo_Update(&trem, sample);
+          }
+
+          if (useOverdrive) {
+            sample = 3 * sample; 
+          } else {
+            sample = sample / 6;
+          }
+          *(audio_ptr + 2) = sample;
+          *(audio_ptr + 3) = sample;
+      }
   }
 }

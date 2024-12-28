@@ -331,17 +331,17 @@ int main() {
       int sample = *(audio_ptr + 3);  // read right channel only
 
       // overdrive effect
-      // sample = IFX_Overdrive_Update(&od, sample);
+      sample = IFX_Overdrive_Update(&od, sample);
 
       // comb filter using delay line
-      sample = COMB_ALPHA * sample + COMB_BETA * DelayLine_Update(&dlyLn, sample);
+      // sample = COMB_ALPHA * sample + COMB_BETA * DelayLine_Update(&dlyLn, sample);
     
       // tremolo effect amplitude modulation
-      sample = Tremolo_Update(&trem, sample);
+      // sample = Tremolo_Update(&trem, sample);
       
       // if you are using overdrive, multiply by 3. (divide by 1)
       // if you are using the other two, divide by 5. (multiply by 1)
-      sample =  1 * (sample / 4); // decrease amplitude to lower volume
+      sample =  3 * (sample / 1); // decrease amplitude to lower volume
       *(audio_ptr + 2) = sample;  // Write to both channels
       *(audio_ptr + 3) = sample;
     }
